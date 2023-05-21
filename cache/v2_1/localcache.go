@@ -13,17 +13,25 @@ type LocalCache struct {
 
 	closeOnce sync.Once
 	close     chan struct{}
+
+	onEvicted func(k string, v any)
 }
+
+type LocalCacheOption func(cache *LocalCache)
 
 type item struct {
 	val      any
 	deadline time.Time
 }
 
-func NewLocalCache(interval time.Duration) *LocalCache {
+func NewLocalCache(interval time.Duration, opts ...LocalCacheOption) *LocalCache {
 	c := &LocalCache{
 		data:  make(map[string]*item),
 		close: make(chan struct{}),
+	}
+
+	for _, opt := range opts {
+		opt(c)
 	}
 
 	go func() {
@@ -38,7 +46,7 @@ func NewLocalCache(interval time.Duration) *LocalCache {
 						break
 					}
 					if v.deadlineBeforeNow(t) {
-						delete(c.data, k)
+						c.delete(k)
 					}
 					i++
 				}
@@ -52,7 +60,13 @@ func NewLocalCache(interval time.Duration) *LocalCache {
 	return c
 }
 
-func (c *LocalCache) Set(ctx context.Context, k string, v any, expiration time.Duration) {
+func LocalCacheWithEvictedCallback(fn func(k string, v any)) LocalCacheOption {
+	return func(cache *LocalCache) {
+		cache.onEvicted = fn
+	}
+}
+
+func (c *LocalCache) Set(ctx context.Context, k string, v any, expiration time.Duration) error {
 	var dl time.Time
 	if expiration > 0 {
 		dl = time.Now().Add(expiration)
@@ -64,6 +78,8 @@ func (c *LocalCache) Set(ctx context.Context, k string, v any, expiration time.D
 		deadline: dl,
 	}
 	c.mu.Unlock()
+
+	return nil
 }
 
 // Get 的时候，粗暴的做法是直接加写锁，但是也可以考虑用 double-check 写法。
@@ -90,7 +106,7 @@ func (c *LocalCache) Get(ctx context.Context, k string) (any, error) {
 			return nil, errors.New("key not found")
 		}
 		if i.deadlineBeforeNow(now) {
-			delete(c.data, k)
+			c.delete(k)
 			return nil, errors.New("key expired")
 		}
 	}
@@ -107,6 +123,15 @@ func (c *LocalCache) Delete(ctx context.Context, key string) error {
 
 func (i *item) deadlineBeforeNow(t time.Time) bool {
 	return !i.deadline.IsZero() && i.deadline.Before(t)
+}
+
+func (c *LocalCache) delete(k string) {
+	item, ok := c.data[k]
+	if !ok {
+		return
+	}
+	delete(c.data, k)
+	c.onEvicted(k, item.val)
 }
 
 func (c *LocalCache) Close() error {

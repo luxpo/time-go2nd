@@ -4,19 +4,22 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestSet(t *testing.T) {
-	c := NewLocalCache(time.Millisecond)
-	c.Set(context.Background(), "a", "aa", time.Second)
-	t.Log(c.data)
-	time.Sleep(time.Second + time.Millisecond)
-	t.Log(c.data)
-}
+func TestLocalCache_Loop(t *testing.T) {
+	cnt := 0
+	c := NewLocalCache(time.Second, LocalCacheWithEvictedCallback(func(k string, v any) {
+		cnt++
+	}))
+	err := c.Set(context.Background(), "k", 123, time.Second)
+	require.NoError(t, err)
 
-func TestClose(t *testing.T) {
-	c := NewLocalCache(time.Second)
-	time.Sleep(time.Second * 2)
-	t.Log(1, c.Close())
-	t.Log(2, c.Close())
+	time.Sleep(time.Second * 3)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.data["k"]
+	require.False(t, ok)
+	require.Equal(t, 1, cnt)
 }
