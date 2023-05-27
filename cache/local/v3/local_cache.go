@@ -155,3 +155,14 @@ func (c *LocalCache) Close() error {
 
 	return nil
 }
+
+func (c *LocalCache) LoadAndDelete(ctx context.Context, key string) (any, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.data[key]
+	if !ok {
+		return nil, errKeyNotFound
+	}
+	c.delete(key)
+	return v.val, nil
+}

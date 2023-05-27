@@ -10,6 +10,8 @@ import (
 )
 
 var (
+	_ Cache = (*RedisCache)(nil)
+
 	errFailedToSetCache = errors.New("cache: 写入 redis 失败")
 )
 
@@ -41,4 +43,8 @@ func (c *RedisCache) Get(ctx context.Context, key string) (any, error) {
 func (c *RedisCache) Delete(ctx context.Context, key string) error {
 	_, err := c.client.Del(ctx, key).Result()
 	return err
+}
+
+func (c *RedisCache) LoadAndDelete(ctx context.Context, key string) (any, error) {
+	return c.client.GetDel(ctx, key).Result()
 }
