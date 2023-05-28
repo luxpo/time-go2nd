@@ -1,7 +1,6 @@
 package net
 
 import (
-	"errors"
 	"net"
 )
 
@@ -27,20 +26,14 @@ func Serve(network, address string) error {
 func handleConn(conn net.Conn) error {
 	for {
 		bs := make([]byte, 8)
-		n, err := conn.Read(bs)
+		_, err := conn.Read(bs)
 		if err != nil {
 			return err
-		}
-		if n != 8 {
-			return errors.New("micro: 没读够数据")
 		}
 		res := handleMsg(bs)
-		n, err = conn.Write(res)
+		_, err = conn.Write(res)
 		if err != nil {
 			return err
-		}
-		if n != len(res) {
-			return errors.New("micro: 没写完数据")
 		}
 	}
 }
