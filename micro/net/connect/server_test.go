@@ -7,7 +7,7 @@ import (
 
 	"github.com/bmizerany/assert"
 	"github.com/golang/mock/gomock"
-	"github.com/luxpo/time-go2nd/micro/net/mocks"
+	"github.com/luxpo/time-go2nd/micro/net/connect/mocks"
 )
 
 //go:generate mockgen -destination=./mocks/mock_net_conn.gen.go -package=mocks net Conn
