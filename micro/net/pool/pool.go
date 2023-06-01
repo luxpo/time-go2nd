@@ -17,7 +17,7 @@ type Pool struct {
 	idleConns chan *idleConn
 	// current conns count
 	cnt      int
-	reqQueue []connReq
+	connReqs []connReq
 }
 
 func NewPool(cfg *PoolConfig) (*Pool, error) {
@@ -63,14 +63,11 @@ type connReq struct {
 }
 
 func (p *Pool) Get(ctx context.Context) (net.Conn, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
+L:
 	for {
 		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		case idleConn := <-p.idleConns:
 			if idleConn.lastActiveTime.Add(p.maxIdleTime).Before(time.Now()) {
 				_ = idleConn.c.Close()
@@ -78,44 +75,45 @@ func (p *Pool) Get(ctx context.Context) (net.Conn, error) {
 			}
 			return idleConn.c, nil
 		default:
-			// no idle conn
-			p.mu.Lock()
-			if p.cnt >= p.maxCnt {
-				req := connReq{
-					conn: make(chan net.Conn, 1),
-				}
-				p.reqQueue = append(p.reqQueue, req)
-				p.mu.Unlock()
-				select {
-				case <-ctx.Done():
-					go func() {
-						c := <-req.conn
-						_ = p.Put(context.Background(), c)
-					}()
-					return nil, ctx.Err()
-				case c := <-req.conn:
-					return c, nil
-				}
-			}
+			break L
+		}
+	}
 
-			c, err := p.factory()
-			if err != nil {
-				return nil, err
-			}
-			p.cnt++
-			p.mu.Unlock()
+	// no idle conn
+	p.mu.Lock()
+	if p.cnt >= p.maxCnt {
+		req := connReq{
+			conn: make(chan net.Conn, 1),
+		}
+		p.connReqs = append(p.connReqs, req)
+		p.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			go func() {
+				c := <-req.conn
+				_ = p.Put(context.Background(), c)
+			}()
+			return nil, ctx.Err()
+		case c := <-req.conn:
 			return c, nil
 		}
 	}
 
+	c, err := p.factory()
+	if err != nil {
+		return nil, err
+	}
+	p.cnt++
+	p.mu.Unlock()
+	return c, nil
 }
 
 func (p *Pool) Put(ctx context.Context, c net.Conn) error {
 	p.mu.Lock()
 
-	if len(p.reqQueue) > 0 {
-		req := p.reqQueue[0]
-		p.reqQueue = p.reqQueue[1:]
+	if len(p.connReqs) > 0 {
+		req := p.connReqs[len(p.connReqs)-1]
+		p.connReqs = p.connReqs[:len(p.connReqs)-1]
 		p.mu.Unlock()
 		req.conn <- c
 		return nil
