@@ -55,9 +55,7 @@ func Test_setFuncField(t *testing.T) {
 						Invoke(gomock.Any(), &Request{
 							ServiceName: "user-service",
 							MethodName:  "GetByID",
-							Arg: &GetByIDReq{
-								ID: 123,
-							},
+							Arg:         []byte(`{"ID":123}`),
 						}).
 						Return(&Response{}, nil)
 					return proxy
