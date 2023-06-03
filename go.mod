@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/golang/mock v1.6.0
+	github.com/gotomicro/ekit v0.0.6
 	github.com/redis/go-redis/v9 v9.0.4
 	github.com/stretchr/testify v1.8.3
 )
