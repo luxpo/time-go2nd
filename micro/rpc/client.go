@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -12,9 +13,14 @@ var (
 )
 
 func InitClientProxy(service Service) error {
+	return setFuncField(service, nil)
+}
+
+func setFuncField(service Service, proxy Proxy) error {
 	if service == nil {
 		return ErrServiceNil
 	}
+
 	val := reflect.ValueOf(service)
 	typ := val.Type()
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
@@ -28,9 +34,9 @@ func InitClientProxy(service Service) error {
 	for i := 0; i < numField; i++ {
 		fieldTyp := typ.Field(i)
 		fieldVal := val.Field(i)
-
 		if fieldVal.CanSet() {
 			fnVal := reflect.MakeFunc(fieldTyp.Type, func(args []reflect.Value) (results []reflect.Value) {
+				ctx := args[0].Interface().(context.Context)
 
 				req := &Request{
 					ServiceName: service.Name(),
@@ -38,8 +44,18 @@ func InitClientProxy(service Service) error {
 					Arg:         args[1].Interface(),
 				}
 				fmt.Println(req)
+
+				retVal := reflect.New(fieldTyp.Type.Out(0)).Elem()
+				resp, err := proxy.Invoke(ctx, req)
+				if err != nil {
+					return []reflect.Value{
+						retVal,
+						reflect.ValueOf(err),
+					}
+				}
+				fmt.Println(resp)
 				return []reflect.Value{
-					reflect.New(fieldTyp.Type.Out(0).Elem()),
+					retVal,
 					reflect.Zero(reflect.TypeOf(new(error)).Elem()),
 				}
 			})
