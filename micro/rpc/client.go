@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/silenceper/pool"
 )
 
 var (
@@ -16,7 +18,10 @@ var (
 )
 
 func InitClientProxy(network, address string, service Service) error {
-	client := NewClient(network, address)
+	client, err := NewClient(network, address)
+	if err != nil {
+		return err
+	}
 	return setFuncField(service, client)
 }
 
@@ -87,15 +92,31 @@ func setFuncField(service Service, proxy Proxy) error {
 }
 
 type Client struct {
-	address string
-	network string
+	pool pool.Pool
 }
 
-func NewClient(network, addr string) *Client {
-	return &Client{
-		address: addr,
-		network: network,
+func NewClient(network, addr string) (*Client, error) {
+	p, err := pool.NewChannelPool(
+		&pool.Config{
+			InitialCap:  1,
+			MaxCap:      30,
+			MaxIdle:     10,
+			IdleTimeout: time.Minute,
+			Factory: func() (interface{}, error) {
+				return net.DialTimeout(network, addr, time.Second*3)
+			},
+			Close: func(i interface{}) error {
+				return i.(net.Conn).Close()
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
+
+	return &Client{
+		pool: p,
+	}, nil
 }
 
 func (c *Client) Invoke(ctx context.Context, req *Request) (*Response, error) {
@@ -113,11 +134,11 @@ func (c *Client) Invoke(ctx context.Context, req *Request) (*Response, error) {
 }
 
 func (c *Client) Send(ctx context.Context, data string) (string, error) {
-	dialer := &net.Dialer{}
-	conn, err := dialer.DialContext(ctx, c.network, c.address)
+	val, err := c.pool.Get()
 	if err != nil {
 		return "", err
 	}
+	conn := val.(net.Conn)
 	defer func() {
 		_ = conn.Close()
 	}()
