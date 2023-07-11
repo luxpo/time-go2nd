@@ -56,13 +56,21 @@ func (s *Server) handleConn(conn net.Conn) error {
 			return err
 		}
 
-		respData, err := s.handleMsg(reqBs)
+		// 还原调用信息
+		req := &Request{}
+		err = jsoniter.Unmarshal(reqBs, req)
 		if err != nil {
-			// 业务 error
 			return err
 		}
 
-		encodedMsg := EncodeMsg(respData)
+		resp, err := s.Invoke(context.Background(), req)
+		if err != nil {
+			// 这个可能你的业务 error
+			// 暂时不知道怎么回传 error，所以我们简单记录一下
+			return err
+		}
+
+		encodedMsg := EncodeMsg(resp.Data)
 		_, err = conn.Write(encodedMsg)
 		if err != nil {
 			return err
@@ -70,12 +78,7 @@ func (s *Server) handleConn(conn net.Conn) error {
 	}
 }
 
-func (s *Server) handleMsg(reqData []byte) ([]byte, error) {
-	req := Request{}
-	err := jsoniter.Unmarshal(reqData, &req)
-	if err != nil {
-		return nil, err
-	}
+func (s *Server) Invoke(ctx context.Context, req *Request) (*Response, error) {
 	// 发起业务调用
 	service, ok := s.services[req.ServiceName]
 	if !ok {
@@ -85,7 +88,7 @@ func (s *Server) handleMsg(reqData []byte) ([]byte, error) {
 	method := val.MethodByName(req.MethodName)
 
 	inReq := reflect.New(method.Type().In(1).Elem())
-	err = jsoniter.Unmarshal(req.Arg, inReq.Interface())
+	err := jsoniter.Unmarshal(req.Arg, inReq.Interface())
 	if err != nil {
 		return nil, err
 	}
@@ -99,5 +102,10 @@ func (s *Server) handleMsg(reqData []byte) ([]byte, error) {
 		return nil, result[1].Interface().(error)
 	}
 	resp, err := jsoniter.Marshal(result[0].Interface())
-	return resp, err
+	if err != nil {
+		return nil, err
+	}
+	return &Response{
+		Data: resp,
+	}, err
 }

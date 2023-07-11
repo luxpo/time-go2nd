@@ -64,9 +64,9 @@ func setFuncField(service Service, proxy Proxy) error {
 						reflect.ValueOf(err),
 					}
 				}
-				fmt.Println(resp)
+				fmt.Println(string(resp.Data))
 
-				err = jsoniter.UnmarshalFromString(resp.Data, retVal.Interface())
+				err = jsoniter.Unmarshal(resp.Data, retVal.Interface())
 				if err != nil {
 					return []reflect.Value{
 						retVal,
@@ -108,7 +108,7 @@ func (c *Client) Invoke(ctx context.Context, req *Request) (*Response, error) {
 		return nil, err
 	}
 	return &Response{
-		Data: resp,
+		Data: []byte(resp),
 	}, nil
 }
 
