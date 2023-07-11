@@ -13,17 +13,20 @@ import (
 const numOfLengthBytes = 8
 
 type Server struct {
-	services map[string]Service
+	stubs map[string]reflectionStub
 }
 
 func NewServer() *Server {
 	return &Server{
-		services: make(map[string]Service, 16),
+		stubs: make(map[string]reflectionStub, 16),
 	}
 }
 
 func (s *Server) RegisterService(service Service) {
-	s.services[service.Name()] = service
+	s.stubs[service.Name()] = reflectionStub{
+		service: service,
+		value:   reflect.ValueOf(service),
+	}
 }
 
 func (s *Server) Start(network, address string) error {
@@ -80,15 +83,32 @@ func (s *Server) handleConn(conn net.Conn) error {
 
 func (s *Server) Invoke(ctx context.Context, req *Request) (*Response, error) {
 	// 发起业务调用
-	service, ok := s.services[req.ServiceName]
+	stub, ok := s.stubs[req.ServiceName]
 	if !ok {
 		return nil, errors.New("service not available")
 	}
-	val := reflect.ValueOf(service)
-	method := val.MethodByName(req.MethodName)
+
+	resp, err := stub.invoke(ctx, req.MethodName, req.Arg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{
+		Data: resp,
+	}, err
+}
+
+type reflectionStub struct {
+	service Service
+	value   reflect.Value
+}
+
+func (s *reflectionStub) invoke(ctx context.Context, methodName string, data []byte) ([]byte, error) {
+	// 反射找到方法，并且执行调用
+	method := s.value.MethodByName(methodName)
 
 	inReq := reflect.New(method.Type().In(1).Elem())
-	err := jsoniter.Unmarshal(req.Arg, inReq.Interface())
+	err := jsoniter.Unmarshal(data, inReq.Interface())
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +121,5 @@ func (s *Server) Invoke(ctx context.Context, req *Request) (*Response, error) {
 	if result[1].Interface() != nil {
 		return nil, result[1].Interface().(error)
 	}
-	resp, err := jsoniter.Marshal(result[0].Interface())
-	if err != nil {
-		return nil, err
-	}
-	return &Response{
-		Data: resp,
-	}, err
+	return jsoniter.Marshal(result[0].Interface())
 }
