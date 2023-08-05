@@ -9,6 +9,7 @@ import (
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/luxpo/time-go2nd/micro/rpc2/message"
 	"github.com/silenceper/pool"
 )
 
@@ -55,10 +56,10 @@ func setFuncField(service Service, proxy Proxy) error {
 						reflect.ValueOf(err),
 					}
 				}
-				req := &Request{
+				req := &message.Request{
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
-					Arg:         reqArg,
+					Data:        reqArg,
 				}
 				fmt.Println(req)
 
@@ -119,7 +120,7 @@ func NewClient(network, addr string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Invoke(ctx context.Context, req *Request) (*Response, error) {
+func (c *Client) Invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
 	data, err := jsoniter.MarshalToString(req)
 	if err != nil {
 		return nil, err
@@ -128,7 +129,7 @@ func (c *Client) Invoke(ctx context.Context, req *Request) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Response{
+	return &message.Response{
 		Data: []byte(resp),
 	}, nil
 }

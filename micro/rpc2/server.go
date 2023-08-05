@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/luxpo/time-go2nd/micro/rpc2/message"
 )
 
 // 长度字段使用的字节数量
@@ -60,7 +61,7 @@ func (s *Server) handleConn(conn net.Conn) error {
 		}
 
 		// 还原调用信息
-		req := &Request{}
+		req := &message.Request{}
 		err = jsoniter.Unmarshal(reqBs, req)
 		if err != nil {
 			return err
@@ -81,19 +82,19 @@ func (s *Server) handleConn(conn net.Conn) error {
 	}
 }
 
-func (s *Server) Invoke(ctx context.Context, req *Request) (*Response, error) {
+func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
 	// 发起业务调用
 	stub, ok := s.stubs[req.ServiceName]
 	if !ok {
 		return nil, errors.New("service not available")
 	}
 
-	resp, err := stub.invoke(ctx, req.MethodName, req.Arg)
+	resp, err := stub.invoke(ctx, req.MethodName, req.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Response{
+	return &message.Response{
 		Data: resp,
 	}, err
 }

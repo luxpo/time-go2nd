@@ -6,9 +6,10 @@ import (
 
 	"github.com/bmizerany/assert"
 	"github.com/golang/mock/gomock"
+	"github.com/luxpo/time-go2nd/micro/rpc2/message"
 )
 
-//go:generate mockgen -destination=./mock_proxy.gen.go -package=rpc github.com/luxpo/time-go2nd/micro/rpc Proxy
+//go:generate mockgen -destination=./mock_proxy.gen.go -package=rpc github.com/luxpo/time-go2nd/micro/rpc2 Proxy
 
 func Test_setFuncField(t *testing.T) {
 	type args struct {
@@ -52,12 +53,12 @@ func Test_setFuncField(t *testing.T) {
 					ctrl := gomock.NewController(t)
 					proxy := NewMockProxy(ctrl)
 					proxy.EXPECT().
-						Invoke(gomock.Any(), &Request{
+						Invoke(gomock.Any(), &message.Request{
 							ServiceName: "user-service",
 							MethodName:  "GetByID",
-							Arg:         []byte(`{"ID":123}`),
+							Data:        []byte(`{"ID":123}`),
 						}).
-						Return(&Response{}, nil)
+						Return(&message.Response{}, nil)
 					return proxy
 				}(),
 			},

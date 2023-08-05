@@ -1,21 +1,15 @@
 package rpc
 
-import "context"
+import (
+	"context"
+
+	"github.com/luxpo/time-go2nd/micro/rpc2/message"
+)
 
 type Service interface {
 	Name() string
 }
 
 type Proxy interface {
-	Invoke(ctx context.Context, req *Request) (resp *Response, err error)
-}
-
-type Request struct {
-	ServiceName string
-	MethodName  string
-	Arg         []byte
-}
-
-type Response struct {
-	Data []byte
+	Invoke(ctx context.Context, req *message.Request) (resp *message.Response, err error)
 }
