@@ -22,13 +22,15 @@ func (s UserService) Name() string {
 }
 
 type UserServiceServer struct {
+	Msg string
+	Err error
 }
 
 func (s *UserServiceServer) GetByID(ctx context.Context, req *GetByIDReq) (*GetByIDResp, error) {
 	log.Println(req)
 	return &GetByIDResp{
-		Msg: "hi",
-	}, nil
+		Msg: s.Msg,
+	}, s.Err
 }
 
 func (s *UserServiceServer) Name() string {

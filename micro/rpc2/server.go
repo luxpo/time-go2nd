@@ -86,15 +86,15 @@ func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Res
 	}
 
 	if !ok {
-		return nil, errors.New("service not available")
+		return resp, errors.New("service not available")
 	}
 
 	respData, err := stub.invoke(ctx, req.MethodName, req.Data)
+	resp.Data = respData
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 
-	resp.Data = respData
 	return resp, nil
 }
 
@@ -118,8 +118,21 @@ func (s *reflectionStub) invoke(ctx context.Context, methodName string, data []b
 		inReq,
 	}
 	result := method.Call(in)
+
 	if result[1].Interface() != nil {
-		return nil, result[1].Interface().(error)
+		err = result[1].Interface().(error)
 	}
-	return jsoniter.Marshal(result[0].Interface())
+
+	var res []byte
+	if result[0].IsNil() {
+		return nil, err
+	} else {
+		var er error
+		res, er = jsoniter.Marshal(result[0].Interface())
+		if er != nil {
+			return nil, er
+		}
+	}
+
+	return res, err
 }
