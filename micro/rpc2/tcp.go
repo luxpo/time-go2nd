@@ -11,16 +11,14 @@ func ReadMsg(conn net.Conn) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	length := binary.BigEndian.Uint64(lenBs)
-	data := make([]byte, length)
-	_, err = conn.Read(data)
-	return data, err
-}
 
-func EncodeMsg(data []byte) []byte {
-	dataLen := len(data)
-	res := make([]byte, dataLen+numOfLengthBytes)
-	binary.BigEndian.PutUint64(res[:numOfLengthBytes], uint64(dataLen))
-	copy(res[numOfLengthBytes:], data)
-	return res
+	headerLength := binary.BigEndian.Uint32(lenBs[:4])
+	bodyLength := binary.BigEndian.Uint32(lenBs[4:8])
+	length := headerLength + bodyLength
+
+	data := make([]byte, length)
+	copy(data[:8], lenBs)
+	_, err = conn.Read(data[8:])
+
+	return data, err
 }

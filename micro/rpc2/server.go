@@ -49,10 +49,6 @@ func (s *Server) Start(network, address string) error {
 	}
 }
 
-// 我们可以认为，一个请求包含两部分
-// 1. 长度字段：用八个字节表示
-// 2. 请求数据：
-// 响应也是这个规范
 func (s *Server) handleConn(conn net.Conn) error {
 	for {
 		reqBs, err := ReadMsg(conn)
@@ -61,21 +57,17 @@ func (s *Server) handleConn(conn net.Conn) error {
 		}
 
 		// 还原调用信息
-		req := &message.Request{}
-		err = jsoniter.Unmarshal(reqBs, req)
-		if err != nil {
-			return err
-		}
-
+		req := message.DecodeReq(reqBs)
 		resp, err := s.Invoke(context.Background(), req)
 		if err != nil {
-			// 这个可能你的业务 error
-			// 暂时不知道怎么回传 error，所以我们简单记录一下
-			return err
+			// 处理业务 error
+			resp.Error = []byte(err.Error())
 		}
 
-		encodedMsg := EncodeMsg(resp.Data)
-		_, err = conn.Write(encodedMsg)
+		resp.CalculateHeaderLength()
+		resp.CalculateBodyLength()
+
+		_, err = conn.Write(message.EncodeResp(resp))
 		if err != nil {
 			return err
 		}
@@ -85,18 +77,25 @@ func (s *Server) handleConn(conn net.Conn) error {
 func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
 	// 发起业务调用
 	stub, ok := s.stubs[req.ServiceName]
+
+	resp := &message.Response{
+		RequestID:  req.RequestID,
+		Version:    req.Version,
+		Compressor: req.Compressor,
+		Serializer: req.Serializer,
+	}
+
 	if !ok {
 		return nil, errors.New("service not available")
 	}
 
-	resp, err := stub.invoke(ctx, req.MethodName, req.Data)
+	respData, err := stub.invoke(ctx, req.MethodName, req.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	return &message.Response{
-		Data: resp,
-	}, err
+	resp.Data = respData
+	return resp, nil
 }
 
 type reflectionStub struct {

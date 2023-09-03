@@ -46,20 +46,12 @@ func TestRespEncodeDecode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.resp.calculateHeaderLength()
-			tc.resp.calculateBodyLength()
+			tc.resp.CalculateHeaderLength()
+			tc.resp.CalculateBodyLength()
 			data := EncodeResp(tc.resp)
 			req := DecodeResp(data)
 			assert.Equal(t, tc.resp, req)
 		})
 
 	}
-}
-
-func (resp *Response) calculateHeaderLength() {
-	resp.HeaderLength = 15 + uint32(len(resp.Error))
-}
-
-func (resp *Response) calculateBodyLength() {
-	resp.BodyLength = uint32(len(resp.Data))
 }

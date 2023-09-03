@@ -59,30 +59,12 @@ func TestEncodeDecode(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.req.calculateHeaderLength()
-			tc.req.calculateBodyLength()
+			tc.req.CalculateHeaderLength()
+			tc.req.CalculateBodyLength()
 			data := EncodeReq(tc.req)
 			req := DecodeReq(data)
 			assert.Equal(t, tc.req, req)
 		})
 
 	}
-}
-
-func (req *Request) calculateHeaderLength() {
-	// 不要忘了分隔符的长度
-	headerLength := 15 + len(req.ServiceName) +
-		1 + len(req.MethodName) +
-		1
-	for key, value := range req.Meta {
-		headerLength += len(key)
-		headerLength++
-		headerLength += len(value)
-		headerLength++
-	}
-	req.HeaderLength = uint32(headerLength)
-}
-
-func (req *Request) calculateBodyLength() {
-	req.BodyLength = uint32(len(req.Data))
 }

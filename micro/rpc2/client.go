@@ -63,6 +63,9 @@ func setFuncField(service Service, proxy Proxy) error {
 				}
 				fmt.Println(req)
 
+				req.CalculateHeaderLength()
+				req.CalculateBodyLength()
+
 				resp, err := proxy.Invoke(ctx, req)
 				if err != nil {
 					return []reflect.Value{
@@ -72,17 +75,33 @@ func setFuncField(service Service, proxy Proxy) error {
 				}
 				fmt.Println(string(resp.Data))
 
-				err = jsoniter.Unmarshal(resp.Data, retVal.Interface())
-				if err != nil {
-					return []reflect.Value{
-						retVal,
-						reflect.ValueOf(err),
+				var retErr error
+				if len(resp.Error) > 0 {
+					// 服务端传来的 error
+					retErr = errors.New(string(resp.Error))
+				}
+
+				if len(resp.Data) > 0 {
+					err = jsoniter.Unmarshal(resp.Data, retVal.Interface())
+					if err != nil {
+						// 反序列化的 error
+						return []reflect.Value{
+							retVal,
+							reflect.ValueOf(err),
+						}
 					}
+				}
+
+				var retErrVal reflect.Value
+				if retErr != nil {
+					retErrVal = reflect.ValueOf(retErr)
+				} else {
+					retErrVal = reflect.Zero(reflect.TypeOf(new(error)).Elem())
 				}
 
 				return []reflect.Value{
 					retVal,
-					reflect.Zero(reflect.TypeOf(new(error)).Elem()),
+					retErrVal,
 				}
 			})
 			fieldVal.Set(fnVal)
@@ -121,36 +140,29 @@ func NewClient(network, addr string) (*Client, error) {
 }
 
 func (c *Client) Invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
-	data, err := jsoniter.MarshalToString(req)
-	if err != nil {
-		return nil, err
-	}
+	data := message.EncodeReq(req)
 	resp, err := c.Send(ctx, data)
 	if err != nil {
 		return nil, err
 	}
-	return &message.Response{
-		Data: []byte(resp),
-	}, nil
+	return message.DecodeResp(resp), nil
 }
 
-func (c *Client) Send(ctx context.Context, data string) (string, error) {
+func (c *Client) Send(ctx context.Context, data []byte) ([]byte, error) {
 	val, err := c.pool.Get()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	conn := val.(net.Conn)
 	defer func() {
 		_ = conn.Close()
 	}()
 
-	encodedMsg := EncodeMsg([]byte(data))
-
-	_, err = conn.Write(encodedMsg)
+	_, err = conn.Write(data)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	respBs, err := ReadMsg(conn)
-	return string(respBs), err
+	return respBs, err
 }

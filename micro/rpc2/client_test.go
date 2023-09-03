@@ -52,13 +52,23 @@ func Test_setFuncField(t *testing.T) {
 				proxy: func() Proxy {
 					ctrl := gomock.NewController(t)
 					proxy := NewMockProxy(ctrl)
+					req := &message.Request{
+						ServiceName: "user-service",
+						MethodName:  "GetByID",
+						Data:        []byte(`{"ID":123}`),
+					}
+					req.CalculateHeaderLength()
+					req.CalculateBodyLength()
+
+					resp := &message.Response{
+						Data: []byte(`{"ID":123}`),
+					}
+					resp.CalculateHeaderLength()
+					resp.CalculateBodyLength()
+
 					proxy.EXPECT().
-						Invoke(gomock.Any(), &message.Request{
-							ServiceName: "user-service",
-							MethodName:  "GetByID",
-							Data:        []byte(`{"ID":123}`),
-						}).
-						Return(&message.Response{}, nil)
+						Invoke(gomock.Any(), req).
+						Return(resp, nil)
 					return proxy
 				}(),
 			},
