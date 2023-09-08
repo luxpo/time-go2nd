@@ -5,28 +5,39 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"strconv"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/luxpo/time-go2nd/micro/rpc2/message"
+	"github.com/luxpo/time-go2nd/micro/rpc2/serialize"
+	"github.com/luxpo/time-go2nd/micro/rpc2/serialize/json"
 )
 
 // 长度字段使用的字节数量
 const numOfLengthBytes = 8
 
 type Server struct {
-	stubs map[string]reflectionStub
+	stubs       map[string]reflectionStub
+	serializers map[uint8]serialize.Serializer
 }
 
 func NewServer() *Server {
-	return &Server{
-		stubs: make(map[string]reflectionStub, 16),
+	s := &Server{
+		stubs:       make(map[string]reflectionStub, 16),
+		serializers: make(map[uint8]serialize.Serializer, 4),
 	}
+	s.RegisterSerializer(&json.Serializer{})
+	return s
+}
+
+func (s *Server) RegisterSerializer(sl serialize.Serializer) {
+	s.serializers[sl.Code()] = sl
 }
 
 func (s *Server) RegisterService(service Service) {
 	s.stubs[service.Name()] = reflectionStub{
-		service: service,
-		value:   reflect.ValueOf(service),
+		service:     service,
+		value:       reflect.ValueOf(service),
+		serializers: s.serializers,
 	}
 }
 
@@ -89,7 +100,7 @@ func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Res
 		return resp, errors.New("service not available")
 	}
 
-	respData, err := stub.invoke(ctx, req.MethodName, req.Data)
+	respData, err := stub.invoke(ctx, req)
 	resp.Data = respData
 	if err != nil {
 		return resp, err
@@ -99,16 +110,21 @@ func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Res
 }
 
 type reflectionStub struct {
-	service Service
-	value   reflect.Value
+	service     Service
+	value       reflect.Value
+	serializers map[uint8]serialize.Serializer
 }
 
-func (s *reflectionStub) invoke(ctx context.Context, methodName string, data []byte) ([]byte, error) {
+func (s *reflectionStub) invoke(ctx context.Context, req *message.Request) ([]byte, error) {
 	// 反射找到方法，并且执行调用
-	method := s.value.MethodByName(methodName)
+	method := s.value.MethodByName(req.MethodName)
 
 	inReq := reflect.New(method.Type().In(1).Elem())
-	err := jsoniter.Unmarshal(data, inReq.Interface())
+	serializer, ok := s.serializers[req.Serializer]
+	if !ok {
+		return nil, errors.New("micro: not supported serializer " + strconv.FormatUint(uint64(req.Serializer), 10))
+	}
+	err := serializer.Decode(req.Data, inReq.Interface())
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +144,7 @@ func (s *reflectionStub) invoke(ctx context.Context, methodName string, data []b
 		return nil, err
 	} else {
 		var er error
-		res, er = jsoniter.Marshal(result[0].Interface())
+		res, er = serializer.Encode(result[0].Interface())
 		if er != nil {
 			return nil, er
 		}

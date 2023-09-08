@@ -7,6 +7,7 @@ import (
 	"github.com/bmizerany/assert"
 	"github.com/golang/mock/gomock"
 	"github.com/luxpo/time-go2nd/micro/rpc2/message"
+	"github.com/luxpo/time-go2nd/micro/rpc2/serialize/json"
 )
 
 //go:generate mockgen -destination=./mock_proxy.gen.go -package=rpc github.com/luxpo/time-go2nd/micro/rpc2 Proxy
@@ -75,9 +76,10 @@ func Test_setFuncField(t *testing.T) {
 			wantErr: nil,
 		},
 	}
+	s := &json.Serializer{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := setFuncField(tt.args.service, tt.args.proxy)
+			err := setFuncField(tt.args.service, tt.args.proxy, s)
 			assert.Equal(t, tt.wantErr, err)
 			if err != nil {
 				return

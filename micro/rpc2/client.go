@@ -8,8 +8,9 @@ import (
 	"reflect"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/luxpo/time-go2nd/micro/rpc2/message"
+	"github.com/luxpo/time-go2nd/micro/rpc2/serialize"
+	"github.com/luxpo/time-go2nd/micro/rpc2/serialize/json"
 	"github.com/silenceper/pool"
 )
 
@@ -18,15 +19,11 @@ var (
 	ErrServiceWrongType = errors.New("rpc: only first-level pointer to struct is supported")
 )
 
-func InitClientProxy(network, address string, service Service) error {
-	client, err := NewClient(network, address)
-	if err != nil {
-		return err
-	}
-	return setFuncField(service, client)
+func (c *Client) InitService(service Service) error {
+	return setFuncField(service, c, c.serializer)
 }
 
-func setFuncField(service Service, proxy Proxy) error {
+func setFuncField(service Service, proxy Proxy, s serialize.Serializer) error {
 	if service == nil {
 		return ErrServiceNil
 	}
@@ -49,7 +46,7 @@ func setFuncField(service Service, proxy Proxy) error {
 				ctx := args[0].Interface().(context.Context)
 				retVal := reflect.New(fieldTyp.Type.Out(0).Elem())
 
-				reqArg, err := jsoniter.Marshal(args[1].Interface())
+				reqArg, err := s.Encode(args[1].Interface())
 				if err != nil {
 					return []reflect.Value{
 						retVal,
@@ -60,6 +57,7 @@ func setFuncField(service Service, proxy Proxy) error {
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
 					Data:        reqArg,
+					Serializer:  s.Code(),
 				}
 				fmt.Println(req)
 
@@ -82,7 +80,7 @@ func setFuncField(service Service, proxy Proxy) error {
 				}
 
 				if len(resp.Data) > 0 {
-					err = jsoniter.Unmarshal(resp.Data, retVal.Interface())
+					err = s.Decode(resp.Data, retVal.Interface())
 					if err != nil {
 						// 反序列化的 error
 						return []reflect.Value{
@@ -112,10 +110,13 @@ func setFuncField(service Service, proxy Proxy) error {
 }
 
 type Client struct {
-	pool pool.Pool
+	pool       pool.Pool
+	serializer serialize.Serializer
 }
 
-func NewClient(network, addr string) (*Client, error) {
+type ClientOption func(client *Client)
+
+func NewClient(network, addr string, opts ...ClientOption) (*Client, error) {
 	p, err := pool.NewChannelPool(
 		&pool.Config{
 			InitialCap:  1,
@@ -134,9 +135,16 @@ func NewClient(network, addr string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
-		pool: p,
-	}, nil
+	c := &Client{
+		pool:       p,
+		serializer: &json.Serializer{},
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c, nil
 }
 
 func (c *Client) Invoke(ctx context.Context, req *message.Request) (*message.Response, error) {
