@@ -9,6 +9,7 @@ require (
 	github.com/redis/go-redis/v9 v9.0.4
 	github.com/silenceper/pool v1.0.0
 	github.com/stretchr/testify v1.8.3
+	google.golang.org/protobuf v1.31.0
 )
 
 require (
