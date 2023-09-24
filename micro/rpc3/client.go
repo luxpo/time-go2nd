@@ -53,11 +53,18 @@ func setFuncField(service Service, proxy Proxy, s serialize.Serializer) error {
 						reflect.ValueOf(err),
 					}
 				}
+				var meta map[string]string
+				if isOneway(ctx) {
+					meta = map[string]string{
+						"one-way": "true",
+					}
+				}
 				req := &message.Request{
 					ServiceName: service.Name(),
 					MethodName:  fieldTyp.Name,
 					Data:        reqArg,
 					Serializer:  s.Code(),
+					Meta:        meta,
 				}
 				fmt.Println(req)
 
@@ -175,6 +182,10 @@ func (c *Client) Send(ctx context.Context, data []byte) ([]byte, error) {
 	_, err = conn.Write(data)
 	if err != nil {
 		return nil, err
+	}
+
+	if isOneway(ctx) {
+		return nil, errors.New("micro: oneway")
 	}
 
 	respBs, err := ReadMsg(conn)

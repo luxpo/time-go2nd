@@ -69,7 +69,14 @@ func (s *Server) handleConn(conn net.Conn) error {
 
 		// 还原调用信息
 		req := message.DecodeReq(reqBs)
-		resp, err := s.Invoke(context.Background(), req)
+
+		ctx := context.Background()
+		oneway, ok := req.Meta["one-way"]
+		if ok && oneway == "true" {
+			ctx = CtxWithOneway(ctx)
+		}
+
+		resp, err := s.Invoke(ctx, req)
 		if err != nil {
 			// 处理业务 error
 			resp.Error = []byte(err.Error())
@@ -98,6 +105,11 @@ func (s *Server) Invoke(ctx context.Context, req *message.Request) (*message.Res
 
 	if !ok {
 		return resp, errors.New("service not available")
+	}
+
+	if isOneway(ctx) {
+		go stub.invoke(ctx, req)
+		return nil, nil
 	}
 
 	respData, err := stub.invoke(ctx, req)
